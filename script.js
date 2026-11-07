@@ -318,58 +318,222 @@ function ttt(area) {
 
 /* ---------- 2048 ---------- */
 function g2048(area) {
-  let g,
-    score,
-    best = 0;
-  area.innerHTML = `<div class="score" id="s48">Score: 0</div><div class="g2048" id="b48"></div><div class="score">Arrow keys or swipe.</div>`;
-  const slide = (row) => {
-    const r = row.filter(Boolean);
-    for (let i = 0; i < r.length - 1; i++)
-      if (r[i] === r[i + 1]) {
-        r[i] *= 2;
-        score += r[i];
-        r.splice(i + 1, 1);
-      }
-    while (r.length < 4) r.push(0);
-    return r;
+  const ANIM = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? 0
+    : 580;
+  const COLORS = {
+    2: ["#f4f0e6", "#5c574e"],
+    4: ["#efe0c4", "#5c574e"],
+    8: ["#f2b179", "#fffaf3"],
+    16: ["#f59563", "#fffaf3"],
+    32: ["#f67c5f", "#fffaf3"],
+    64: ["#f65e3b", "#fffaf3"],
+    128: ["#edcf72", "#fffaf3"],
+    256: ["#edcc61", "#fffaf3"],
+    512: ["#edc850", "#fffaf3"],
+    1024: ["#edc53f", "#fffaf3"],
+    2048: ["#edc22e", "#fffaf3"],
   };
-  function spawn() {
-    const e = [];
-    g.forEach((v, i) => {
-      if (!v) e.push(i);
-    });
-    if (e.length)
-      g[e[Math.floor(Math.random() * e.length)]] = Math.random() < 0.9 ? 2 : 4;
+  let tiles = [],
+    score = 0,
+    seq = 1,
+    locked = false,
+    over = false,
+    made2048 = false,
+    pending = 0;
+  area.innerHTML = `<div class="score" id="s48">Score: 0</div><div class="g2048-wrap" id="b48"><div class="g2048">${Array.from({ length: 16 }, () => `<div class="slot"></div>`).join("")}</div><div class="tile-layer" id="layer48"></div></div><div class="score" id="h48">Arrow keys or swipe.</div>`;
+  const board = $("b48");
+  const layer = $("layer48");
+
+  function look(v) {
+    return COLORS[v] || ["#3c3a32", "#fffaf3"];
   }
-  function draw() {
-    $("b48").innerHTML = g
-      .map(
-        (v) =>
-          `<div style="${v ? `background:hsl(${(Math.log2(v) * 35 + 20) % 360} 80% 62%)` : ""}">${v || ""}</div>`,
-      )
-      .join("");
-    $("s48").textContent = "Score: " + score;
+  function spot(r, c) {
+    const slot = board.querySelectorAll(".slot")[r * 4 + c];
+    const br = board.getBoundingClientRect();
+    const sr = slot.getBoundingClientRect();
+    return { x: sr.left - br.left, y: sr.top - br.top, size: sr.width };
+  }
+  function ensure(tile) {
+    let el = layer.querySelector(`[data-id="${tile.id}"]`);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "tile";
+      el.dataset.id = tile.id;
+      el.innerHTML = `<div class="face"></div>`;
+      layer.appendChild(el);
+    }
+    return el;
+  }
+  let frame = 0;
+  function paint(tile) {
+    const el = ensure(tile);
+    const face = el.querySelector(".face");
+    const p = spot(tile.r, tile.c);
+    const [bg, fg] = look(tile.v);
+    el.style.width = p.size + "px";
+    el.style.height = p.size + "px";
+    el.style.zIndex = tile.z || "1";
+    face.textContent = tile.v;
+    face.style.color = fg;
+    face.style.background = `linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 46%), ${bg}`;
+    face.style.fontSize =
+      (tile.v >= 1024 ? p.size * 0.34 : tile.v >= 128 ? p.size * 0.4 : p.size * 0.48) +
+      "px";
+    el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    return el;
+  }
+  function glide(trips, done) {
+    const token = ++frame;
+    if (!ANIM) {
+      trips.forEach(({ el, x1, y1 }) => {
+        el.style.transform = `translate(${x1}px, ${y1}px)`;
+      });
+      done();
+      return;
+    }
+    const t0 = performance.now();
+    const step = (now) => {
+      if (token !== frame) return;
+      const u = Math.min((now - t0) / ANIM, 1);
+      const e = u < 0.5 ? 2 * u * u : 1 - ((2 - 2 * u) ** 2) / 2;
+      trips.forEach(({ el, x0, y0, x1, y1 }) => {
+        const x = x0 + (x1 - x0) * e;
+        const y = y0 + (y1 - y0) * e;
+        el.style.transform = `translate(${x}px, ${y}px)`;
+      });
+      if (u < 1) requestAnimationFrame(step);
+      else done();
+    };
+    requestAnimationFrame(step);
+  }
+  function pop(tile) {
+    const el = paint(tile);
+    el.classList.remove("pop");
+    el.offsetHeight;
+    el.classList.add("pop");
+  }
+  function spawn() {
+    const taken = new Set(tiles.map((t) => t.r * 4 + t.c));
+    const empty = [];
+    for (let i = 0; i < 16; i++) if (!taken.has(i)) empty.push(i);
+    if (!empty.length) return;
+    const i = empty[Math.floor(Math.random() * empty.length)];
+    const tile = {
+      id: seq++,
+      v: Math.random() < 0.9 ? 2 : 4,
+      r: Math.floor(i / 4),
+      c: i % 4,
+    };
+    tiles.push(tile);
+    pop(tile);
   }
   function canMove() {
-    if (g.includes(0)) return true;
-    return g.some(
-      (v, i) => (i % 4 < 3 && v === g[i + 1]) || (i < 12 && v === g[i + 4]),
+    if (tiles.length < 16) return true;
+    return tiles.some((t) =>
+      [
+        [0, 1],
+        [1, 0],
+      ].some(([dr, dc]) =>
+        tiles.some((u) => u.r === t.r + dr && u.c === t.c + dc && u.v === t.v),
+      ),
     );
   }
-  function move(d) {
-    // d: 0 left, 1 right, 2 up, 3 down
-    const old = g.join();
-    for (let k = 0; k < 4; k++) {
-      const idx = [0, 1, 2, 3].map((j) => (d < 2 ? k * 4 + j : j * 4 + k));
-      let row = idx.map((i) => g[i]);
-      if (d % 2) row.reverse();
-      row = slide(row);
-      if (d % 2) row.reverse();
-      idx.forEach((i, j) => (g[i] = row[j]));
+  function line(d, k) {
+    const cells = [];
+    for (let j = 0; j < 4; j++) {
+      if (d === 0) cells.push([k, j]);
+      else if (d === 1) cells.push([k, 3 - j]);
+      else if (d === 2) cells.push([j, k]);
+      else cells.push([3 - j, k]);
     }
-    if (g.join() !== old) spawn();
-    draw();
-    if (!canMove()) $("s48").textContent = "No moves left! Score: " + score;
+    return cells;
+  }
+  function finish(moved, removed) {
+    removed.forEach((tile) => {
+      const el = layer.querySelector(`[data-id="${tile.id}"]`);
+      if (el) el.remove();
+    });
+    const gone = new Set(removed.map((t) => t.id));
+    tiles = tiles.filter((t) => !gone.has(t.id));
+    moved.forEach(({ tile, v, merge }) => {
+      tile.v = v;
+      tile.z = 1;
+      const el = paint(tile);
+      el.classList.remove("pop", "merge");
+      if (merge) {
+        el.offsetHeight;
+        el.classList.add("merge");
+      }
+      if (v >= 2048) made2048 = true;
+    });
+    spawn();
+    $("s48").textContent = "Score: " + score;
+    if (!canMove()) {
+      over = true;
+      $("h48").textContent = "No moves left. Score: " + score;
+    } else if (made2048) {
+      $("h48").textContent = "You made 2048. Keep going.";
+    }
+    locked = false;
+  }
+  function move(d) {
+    if (locked || over) return;
+    const moved = [];
+    const removed = [];
+    let changed = false;
+    for (let k = 0; k < 4; k++) {
+      const coords = line(d, k);
+      const row = coords
+        .map(([r, c]) => tiles.find((t) => t.r === r && t.c === c))
+        .filter(Boolean);
+      let write = 0;
+      for (let i = 0; i < row.length; i++) {
+        const tile = row[i];
+        const [r, c] = coords[write];
+        if (i + 1 < row.length && tile.v === row[i + 1].v) {
+          const other = row[i + 1];
+          moved.push({ tile, r, c, v: tile.v * 2, merge: true });
+          removed.push(other);
+          other.r = r;
+          other.c = c;
+          other.z = 2;
+          score += tile.v * 2;
+          changed = true;
+          i++;
+        } else {
+          if (tile.r !== r || tile.c !== c) changed = true;
+          moved.push({ tile, r, c, v: tile.v, merge: false });
+        }
+        write++;
+      }
+    }
+    if (!changed) return;
+    locked = true;
+    const layerBox = layer.getBoundingClientRect();
+    const from = (tile) => {
+      const el = ensure(tile);
+      const box = el.getBoundingClientRect();
+      return { el, x: box.left - layerBox.left, y: box.top - layerBox.top };
+    };
+    const trips = [];
+    moved.forEach(({ tile, r, c, merge }) => {
+      const start = from(tile);
+      const end = spot(r, c);
+      tile.r = r;
+      tile.c = c;
+      tile.z = merge ? 3 : 1;
+      start.el.style.zIndex = tile.z;
+      trips.push({ el: start.el, x0: start.x, y0: start.y, x1: end.x, y1: end.y });
+    });
+    removed.forEach((tile) => {
+      const start = from(tile);
+      const end = spot(tile.r, tile.c);
+      start.el.style.zIndex = "2";
+      trips.push({ el: start.el, x0: start.x, y0: start.y, x1: end.x, y1: end.y });
+    });
+    $("s48").textContent = "Score: " + score;
+    glide(trips, () => finish(moved, removed));
   }
   const keys = {
     ArrowLeft: 0,
@@ -398,15 +562,21 @@ function g2048(area) {
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 25) return;
     move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 0) : dy > 0 ? 3 : 2);
   };
-  g = Array(16).fill(0);
-  score = 0;
+  const onResize = () => {
+    if (!locked) tiles.forEach((t) => paint(t));
+  };
   spawn();
   spawn();
-  draw();
   document.addEventListener("keydown", onKey);
-  $("b48").addEventListener("touchstart", ts, { passive: true });
-  $("b48").addEventListener("touchend", te);
-  return () => document.removeEventListener("keydown", onKey);
+  window.addEventListener("resize", onResize);
+  board.addEventListener("touchstart", ts, { passive: true });
+  board.addEventListener("touchend", te);
+  return () => {
+    frame++;
+    clearTimeout(pending);
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", onResize);
+  };
 }
 
 /* ---------- MINESWEEPER ---------- */

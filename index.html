@@ -227,24 +227,85 @@
           display: none;
         }
       }
+      .g2048-wrap {
+        position: relative;
+        width: min(430px, 100%);
+        touch-action: none;
+        user-select: none;
+      }
       .g2048 {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 8px;
-        width: min(340px, 100%);
-        background: var(--line);
-        padding: 8px;
+        gap: 12px;
+        background: #2a2558;
+        padding: 14px;
+        border-radius: 18px;
+        box-shadow:
+          inset 0 0 0 2px #3d3874,
+          0 14px 30px rgba(0, 0, 0, 0.28);
+      }
+      .g2048 .slot {
+        aspect-ratio: 1;
+        border-radius: 12px;
+        background: rgba(13, 11, 33, 0.55);
+      }
+      .g2048-wrap .tile-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .g2048-wrap .tile {
+        position: absolute;
+        top: 0;
+        left: 0;
         border-radius: 12px;
       }
-      .g2048 div {
-        aspect-ratio: 1;
+      .g2048-wrap .tile .face {
+        width: 100%;
+        height: 100%;
         display: grid;
         place-items: center;
+        border-radius: inherit;
         font-weight: 800;
-        font-size: 1.6rem;
-        border-radius: 8px;
-        background: var(--card);
-        color: var(--ink);
+        letter-spacing: -0.04em;
+        box-shadow:
+          inset 0 2px 0 rgba(255, 255, 255, 0.42),
+          inset 0 -5px 0 rgba(0, 0, 0, 0.14),
+          0 8px 14px rgba(0, 0, 0, 0.2);
+      }
+      .g2048-wrap .tile.pop .face {
+        animation: tile-in 340ms cubic-bezier(0.2, 0.85, 0.25, 1.15);
+      }
+      .g2048-wrap .tile.merge .face {
+        animation: tile-merge 340ms ease;
+      }
+      @keyframes tile-in {
+        from {
+          transform: scale(0.2);
+        }
+        to {
+          transform: scale(1);
+        }
+      }
+      @keyframes tile-merge {
+        0% {
+          transform: scale(1);
+        }
+        45% {
+          transform: scale(1.16);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .g2048-wrap .tile {
+          transition: none;
+        }
+        .g2048-wrap .tile.pop .face,
+        .g2048-wrap .tile.merge .face {
+          animation: none;
+        }
       }
       .mines {
         display: grid;
